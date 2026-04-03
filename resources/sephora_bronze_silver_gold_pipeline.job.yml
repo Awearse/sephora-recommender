@@ -1,0 +1,40 @@
+resources:
+  jobs:
+    sephora_bronze_silver_gold_pipeline:
+      name: sephora_bronze_silver_gold_pipeline
+      tasks:
+        - task_key: bronze_layer
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../data_pipeline/bronze_layer.ipynb
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+          webhook_notifications: {}
+        - task_key: silver_layer
+          depends_on:
+            - task_key: bronze_layer
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../data_pipeline/silver_layer.ipynb
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+          webhook_notifications: {}
+        - task_key: gold_layer
+          depends_on:
+            - task_key: silver_layer
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../data_pipeline/gold_layer.ipynb
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications:
+        no_alert_for_skipped_runs: false
+      max_concurrent_runs: 1
+      performance_target: PERFORMANCE_OPTIMIZED
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}
