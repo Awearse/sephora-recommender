@@ -1,0 +1,343 @@
+# =========================================
+# Data Quality Checks Configuration
+# Medallion Architecture: Bronze → Silver → Gold
+# =========================================
+
+global:
+  catalog: workspace
+  schema: default
+  results_table: data_quality_results
+
+bronze_checks:
+  bronze_sephora_product_info:
+    enabled: true
+    description: "Product information master data"
+    checks:
+      - type: row_count
+        min_rows: 1000
+        alert_on_zero: true
+        severity: critical
+      
+      - type: schema_validation
+        required_columns:
+          - product_id
+          - product_name
+          - brand_name
+          - price_usd
+          - bronze_ingestion_ts
+          - bronze_source_file
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - product_id
+        max_null_percent: 0
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - product_name
+          - brand_name
+        max_null_percent: 5
+        severity: warning
+      
+      - type: duplicate_check
+        key_columns:
+          - product_id
+        max_duplicates: 0
+        severity: critical
+      
+      - type: freshness
+        max_age_hours: 24
+        timestamp_column: bronze_ingestion_ts
+        severity: warning
+  
+  bronze_sephora_reviews:
+    enabled: true
+    description: "Customer reviews data from multiple sources"
+    checks:
+      - type: row_count
+        min_rows: 5000
+        alert_on_zero: true
+        severity: critical
+      
+      - type: schema_validation
+        required_columns:
+          - product_id
+          - author_id
+          - rating
+          - review_text
+          - submission_time
+          - bronze_ingestion_ts
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - product_id
+          - author_id
+          - rating
+        max_null_percent: 0
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - review_text
+        max_null_percent: 10
+        severity: warning
+      
+      - type: value_range
+        column: rating
+        min_value: "1"
+        max_value: "5"
+        severity: critical
+      
+      - type: referential_integrity
+        column: product_id
+        reference_table: bronze_sephora_product_info
+        reference_column: product_id
+        severity: warning
+      
+      - type: duplicate_check
+        key_columns:
+          - product_id
+          - author_id
+          - submission_time
+        max_duplicates: 10
+        severity: warning
+      
+      - type: freshness
+        max_age_hours: 24
+        timestamp_column: bronze_ingestion_ts
+        severity: warning
+  
+  bronze_skincare_cosmetic_p:
+    enabled: true
+    description: "Skincare and cosmetics product enrichment data"
+    checks:
+      - type: row_count
+        min_rows: 500
+        severity: warning
+      
+      - type: schema_validation
+        required_columns:
+          - product_id
+          - bronze_ingestion_ts
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - product_id
+        max_null_percent: 0
+        severity: critical
+      
+      - type: duplicate_check
+        key_columns:
+          - product_id
+        max_duplicates: 0
+        severity: critical
+      
+      - type: freshness
+        max_age_hours: 24
+        timestamp_column: bronze_ingestion_ts
+        severity: warning
+
+# =========================================
+# SILVER LAYER CHECKS
+# =========================================
+
+silver_checks:
+  silver_sephora_reviews_cleaned:
+    enabled: true
+    description: "Cleaned and standardized reviews with data quality improvements"
+    checks:
+      - type: row_count
+        min_rows: 5000
+        alert_on_zero: true
+        severity: critical
+      
+      - type: schema_validation
+        required_columns:
+          - product_id
+          - author_id
+          - rating
+          - review_text
+          - submission_time
+          - is_recommended
+          - helpfulness
+        severity: critical
+      
+      - type: duplicate_check
+        key_columns:
+          - product_id
+          - author_id
+          - submission_time
+        max_duplicates: 0
+        severity: critical
+      
+      - type: data_type_validation
+        validations:
+          rating: integer
+          helpfulness: double
+          submission_time: timestamp
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - rating
+          - product_id
+          - author_id
+        max_null_percent: 0
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - review_text
+        max_null_percent: 5
+        severity: warning
+      
+      - type: value_range
+        column: rating
+        min_value: 1
+        max_value: 5
+        severity: critical
+      
+      - type: value_range
+        column: helpfulness
+        min_value: 0.0
+        max_value: 1.0
+        severity: warning
+      
+      - type: referential_integrity
+        column: product_id
+        reference_table: bronze_sephora_product_info
+        reference_column: product_id
+        severity: warning
+
+# =========================================
+# GOLD LAYER CHECKS
+# =========================================
+
+gold_checks:
+  gold_product_metrics:
+    enabled: true
+    description: "Aggregated product-level metrics for analytics and ML"
+    checks:
+      - type: row_count
+        min_rows: 100
+        severity: critical
+      
+      - type: schema_validation
+        required_columns:
+          - product_id
+          - product_name
+          - brand_name
+          - avg_rating
+          - review_count
+          - recommendation_rate
+        severity: critical
+      
+      - type: metric_range
+        column: avg_rating
+        min_value: 1.0
+        max_value: 5.0
+        severity: critical
+      
+      - type: metric_range
+        column: review_count
+        min_value: 0
+        severity: critical
+      
+      - type: metric_range
+        column: recommendation_rate
+        min_value: 0.0
+        max_value: 1.0
+        severity: critical
+      
+      - type: null_check
+        columns:
+          - product_id
+          - avg_rating
+          - review_count
+        max_null_percent: 0
+        severity: critical
+      
+      - type: consistency_check
+        description: "Total reviews should match source bronze table"
+        severity: warning
+      
+      - type: duplicate_check
+        key_columns:
+          - product_id
+        max_duplicates: 0
+        severity: critical
+
+# =========================================
+# ALERT CONFIGURATION
+# =========================================
+
+alerts:
+  critical:
+    enabled: true
+    channels:
+      - email
+    email:
+      recipients:
+        - jiasheng.chen@u.nus.edu
+        - emilykohshuenli@gmail.com
+      subject_prefix: "[CRITICAL]"
+  
+  warning:
+    enabled: true
+    channels:
+      - email
+    email:
+      recipients:
+        - jiasheng.chen@u.nus.edu
+        - emilykohshuenli@gmail.com
+      subject_prefix: "[WARNING]"
+  
+  threshold:
+    # Only alert if multiple checks fail
+    min_failures_to_alert: 2
+    time_window_minutes: 60
+
+# =========================================
+# REPORTING CONFIGURATION
+# =========================================
+
+reporting:
+  save_results: true
+  results_table: workspace.default.data_quality_results
+  retention_days: 90
+  
+  dashboard:
+    enabled: true
+    refresh_schedule: "0 */6 * * *"  # Every 6 hours
+  
+  summary_email:
+    enabled: true
+    schedule: "0 8 * * *"  # Daily at 8 AM
+    recipients:
+      - jiasheng.chen@u.nus.edu
+      - emilykohshuenli@gmail.com
+  
+  metrics:
+    track_trends: true
+    trend_window_days: 30
+    alert_on_degradation: true
+
+# =========================================
+# EXECUTION SETTINGS
+# =========================================
+
+execution:
+  parallel_checks: true
+  max_concurrent_tables: 3
+  timeout_seconds: 300
+  retry_on_failure: true
+  max_retries: 2
+  
+  schedule:
+    bronze: "0 * * * *"      # Every hour
+    silver: "30 * * * *"     # Every hour at :30
+    gold: "0 */6 * * *"      # Every 6 hours
