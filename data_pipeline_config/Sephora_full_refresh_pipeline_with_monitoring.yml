@@ -1,0 +1,118 @@
+resources:
+  jobs:
+    Sephora_full_refresh_pipeline_with_monitoring:
+      name: Sephora_full_refresh_pipeline_with_monitoring
+
+      email_notifications:
+        on_failure:
+          - your_email@example.com
+          - teammate_email@example.com
+
+      tasks:
+        - task_key: bronze_layer
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/bronze_layer
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: bronze_health_check
+          depends_on:
+            - task_key: bronze_layer
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/pipeline_health_checker
+            base_parameters:
+              layer: bronze
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: silver_layer
+          depends_on:
+            - task_key: bronze_health_check
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/silver_layer
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: silver_health_check
+          depends_on:
+            - task_key: silver_layer
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/pipeline_health_checker
+            base_parameters:
+              layer: silver
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: gold_layer
+          depends_on:
+            - task_key: silver_health_check
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/gold_layer
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: gold_health_check
+          depends_on:
+            - task_key: gold_layer
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/data_pipeline/pipeline_health_checker
+            base_parameters:
+              layer: gold
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: hybrid_model
+          depends_on:
+            - task_key: gold_health_check
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/models/FINAL/Hybrid_Train_Test_Split_0.7IBCF_0.3ContentF
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: MF_model
+          depends_on:
+            - task_key: hybrid_model
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/models/FINAL/MF Train Test Split (Reduce Data Sparsity)
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+        - task_key: popularity_model
+          depends_on:
+            - task_key: MF_model
+          notebook_task:
+            notebook_path: /Workspace/Users/<your_databricks_email>/sephora-recommender/models/Popularity Recommender
+            source: WORKSPACE
+          email_notifications:
+            on_failure:
+              - your_email@example.com
+              - teammate_email@example.com
+
+      queue:
+        enabled: true
+
+      performance_target: PERFORMANCE_OPTIMIZED
